@@ -13,7 +13,7 @@
     * [Running the Script](#running-the-script)
     * [Operation Modes & Hotkeys](#operation-modes--hotkeys)
     * [Reactive Refinement](#reactive-refinement)
-    * [Template Management](#template-management)
+    * [Template Management](#template-samples)
 7.  [Configuration](#configuration)
 8.  [Troubleshooting](#troubleshooting)
 9.  [Contributing](#contributing)
@@ -71,10 +71,9 @@ Say goodbye to expensive, untrustworthy software and take control of your automa
 
 1.  **Clone the repository (or download the script):**
     ```bash
-    git clone [https://github.com/YourUsername/OpenAutomate.git](https://github.com/YourUsername/OpenAutomate.git)
-    cd OpenAutomate
+    git clone [https://github.com/MrCookie-for-Programmers/openautomate.git](https://github.com/MrCookie-for-Programmers/openautomate.git)
+    cd openautomate
     ```
-    (Replace `YourUsername` with your GitHub username once published.)
 
 2.  **Create a virtual environment (Highly Recommended for All OSes):**
     A virtual environment creates an isolated space for this project's Python dependencies, preventing conflicts with other Python projects or your system's Python installation. This is a best practice regardless of your operating system.
@@ -111,9 +110,7 @@ Upon the first run, the script will automatically create the following directori
 
 Navigate to the script's directory in your terminal (with your virtual environment activated) and run:
 ```bash
-python your_script_name.py
-(Replace your_script_name.py with the actual filename, e.g., openautomate_script.py).
-
+python thing.py
 Operation Modes & Hotkeys
 The script provides several modes to enhance its functionality:
 

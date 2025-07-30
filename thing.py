@@ -54,11 +54,11 @@ is_auto_train_mode = False
 is_settings_menu_active = False
 
 # --- Global State for Training & Refinement ---
-recorded_clicks_data = [] 
-recording_group_counter = {} 
-last_scan_near_misses = [] 
+recorded_clicks_data = []
+recording_group_counter = {}
+last_scan_near_misses = []
 last_scan_completion_time = 0
-auto_train_refinement_counters = {} 
+auto_train_refinement_counters = {}
 
 # --- Setup Directories ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -84,7 +84,7 @@ def load_config():
     try:
         with open(CONFIG_FILE, 'r') as f:
             loaded_config = json.load(f)
-        
+
         config = {**DEFAULT_CONFIG, **loaded_config}
         print(f"Configuration loaded from {CONFIG_FILE}.")
 
@@ -136,7 +136,7 @@ def update_config_value(key, value):
                 value = int(value)
             elif isinstance(DEFAULT_CONFIG[key], float):
                 value = float(value)
-            
+
             if key == 'RESIZE_DIMENSIONS_WIDTH':
                 config['RESIZE_DIMENSIONS_WIDTH'] = value
                 RESIZE_DIMENSIONS = (value, config['RESIZE_DIMENSIONS_HEIGHT'])
@@ -155,7 +155,7 @@ def update_config_value(key, value):
                 print("Note: RECORDING_REGION_SIZE change might require script restart for new template captures.")
             else:
                 config[key] = value
-                globals()[key] = value 
+                globals()[key] = value
 
             save_config()
             print(f"Setting '{key}' updated to {value}.")
@@ -170,21 +170,21 @@ def show_settings_menu():
     global is_settings_menu_active
     is_settings_menu_active = True
     print("\n--- Settings Menu (Press 'e' or unrecognized input to exit) ---")
-    
+
     while is_settings_menu_active:
         print("\nCurrent Configuration:")
         for key, value in config.items():
             print(f"  {key}: {value}")
-        
+
         setting_to_change = input("\nEnter setting name to change (or 'e' to exit): ").strip()
         if setting_to_change.lower() == 'e':
             is_settings_menu_active = False
             break
-        
+
         if setting_to_change not in config:
             print("Invalid setting name. Please try again.")
             continue
-        
+
         new_value_str = input(f"Enter new value for '{setting_to_change}': ").strip()
         update_config_value(setting_to_change, new_value_str)
 
@@ -194,10 +194,10 @@ def show_settings_menu():
 def get_average_color_blocks(pil_image, grid_size=(4, 4)):
     if pil_image.size != RESIZE_DIMENSIONS:
         pil_image = pil_image.resize(RESIZE_DIMENSIONS, Image.Resampling.LANCZOS)
-    
+
     pil_image = pil_image.convert('RGB')
     width, height = pil_image.size
-    
+
     block_width = width // grid_size[0]
     block_height = height // grid_size[1]
 
@@ -217,13 +217,13 @@ def get_average_color_blocks(pil_image, grid_size=(4, 4)):
             right = min(right, width)
             bottom = min(bottom, height)
 
-            if right <= left or bottom <= top: 
-                avg_colors.append((0, 0, 0)) 
+            if right <= left or bottom <= top:
+                avg_colors.append((0, 0, 0))
                 continue
 
             block = pil_image.crop((left, top, right, bottom))
             pixels = list(block.getdata())
-            if not pixels: 
+            if not pixels:
                 avg_colors.append((0, 0, 0))
                 continue
 
@@ -232,7 +232,7 @@ def get_average_color_blocks(pil_image, grid_size=(4, 4)):
                 r_sum += r
                 g_sum += g
                 b_sum += b
-            
+
             num_pixels = len(pixels)
             avg_colors.append((r_sum // num_pixels, g_sum // num_pixels, b_sum // num_pixels))
     return avg_colors
@@ -252,7 +252,7 @@ def compare_color_blocks(blocks1, blocks2, max_distance):
 
         if distance <= max_distance:
             matching_blocks += 1
-            
+
     return matching_blocks / total_blocks
 
 def load_templates(templates_dir_path):
@@ -270,13 +270,13 @@ def load_templates(templates_dir_path):
                 img = Image.open(template_path)
                 resized_img = img.resize(RESIZE_DIMENSIONS, Image.Resampling.LANCZOS)
                 color_blocks = get_average_color_blocks(resized_img)
-                templates.append((filename, img, color_blocks)) 
+                templates.append((filename, img, color_blocks))
                 print(f" - Loaded template: {filename} (Original size: {img.size})")
             except Image.UnidentifiedImageError:
                 print(f"Warning: Could not identify '{filename}' as a valid image. Skipping.")
             except Exception as e:
                 print(f"Error loading '{filename}': {e}. Skipping.")
-    
+
     if not templates:
         print(f"No .png templates found in '{templates_dir_path}'.")
     return templates
@@ -287,32 +287,32 @@ def load_templates(templates_dir_path):
 def on_click(x, y, button, pressed):
     global is_new_template_training_mode, recorded_clicks_data, recording_group_counter
     global is_auto_train_mode, last_scan_near_misses, last_scan_completion_time
-    global templates_data, auto_train_refinement_counters 
+    global templates_data, auto_train_refinement_counters
 
     if pressed and button == mouse.Button.left and not is_settings_menu_active:
-        
+
         # --- 1. Reactive Refinement Check ---
         if time.time() - last_scan_completion_time < REFINEMENT_CLICK_WINDOW_SECONDS:
             for template_name, location_box in last_scan_near_misses:
                 if location_box.left <= x <= location_box.left + location_box.width and \
                    location_box.top <= y <= location_box.top + location_box.height:
-                    
+
                     print(f"\n*** Manual click at ({x}, {y}) detected within a 'near-miss' region for '{template_name}'. ***")
                     print(f"    Do you want to update/refine '{template_name}' using this current image? (y/n)")
-                    
+
                     response = input().strip().lower()
                     if response == 'y':
                         refine_existing_template(template_name, location_box)
-                        last_scan_near_misses = [] 
-                        return 
+                        last_scan_near_misses = []
+                        return
                     else:
                         print("    Template refinement skipped.")
-                        last_scan_near_misses = [] 
-        
+                        last_scan_near_misses = []
+
         # --- 2. Auto-Train Mode (F12) ---
         if is_auto_train_mode:
             print(f"Manual click detected at ({x}, {y}). Auto-training active.")
-            
+
             screen_width, screen_height = pyautogui.size()
             region_left = int(max(0, x - RECORDING_REGION_SIZE[0] // 2))
             region_top = int(max(0, y - RECORDING_REGION_SIZE[1] // 2))
@@ -321,11 +321,11 @@ def on_click(x, y, button, pressed):
 
             if region_left + region_width > screen_width: region_left = screen_width - region_width
             if region_top + region_height > screen_height: region_top = screen_height - region_height
-            region_left = max(0, region_left) 
+            region_left = max(0, region_left)
             region_top = max(0, region_top)
             if region_width <= 0: region_width = 1
             if region_height <= 0: region_height = 1
-            
+
             try:
                 clicked_region_img = pyautogui.screenshot(region=(region_left, region_top, region_width, region_height))
                 resized_clicked_img = clicked_region_img.resize(RESIZE_DIMENSIONS, Image.Resampling.LANCZOS)
@@ -333,14 +333,13 @@ def on_click(x, y, button, pressed):
 
                 best_match_template_name = None
                 highest_similarity = 0.0
-                best_match_location = None 
+                best_match_location = None
 
                 for template_name, original_template_pil, template_blocks in templates_data:
                     similarity = compare_color_blocks(clicked_blocks, template_blocks, MAX_COLOR_DISTANCE)
-                    
-                    # Corrected: os.im.join to os.path.join
+
                     template_pyautogui_path = os.path.join(TEMPLATES_FULL_PATH, template_name)
-                    try: 
+                    try:
                         location_on_screen = pyautogui.locateOnScreen(
                             template_pyautogui_path,
                             confidence=PYAUTOGUI_CONFIDENCE_INITIAL,
@@ -350,14 +349,14 @@ def on_click(x, y, button, pressed):
                             template_center_x = location_on_screen.left + location_on_screen.width // 2
                             template_center_y = location_on_screen.top + location_on_screen.height // 2
                             pixel_distance = math.sqrt((x - template_center_x)**2 + (y - template_center_y)**2)
-                            
+
                             if pixel_distance <= AUTO_TRAIN_PIXEL_DISTANCE_THRESHOLD and similarity > highest_similarity:
                                 highest_similarity = similarity
                                 best_match_template_name = template_name
                                 best_match_location = location_on_screen
 
                     except pyautogui.ImageNotFoundException:
-                        pass 
+                        pass
                     except Exception as e:
                         print(f"Warning: Error during pyautogui.locateOnScreen for '{template_name}' during auto-train: {e}")
 
@@ -374,7 +373,7 @@ def on_click(x, y, button, pressed):
                             refine_existing_template(best_match_template_name, best_match_location)
                         else:
                             refine_existing_template(best_match_template_name, pyautogui.Box(region_left, region_top, region_width, region_height))
-                        
+
                         auto_train_refinement_counters[best_match_template_name] = 0
                 else:
                     print(f"  --> Auto-training: No sufficiently similar existing template found (Similarity: {highest_similarity:.2f}).")
@@ -393,7 +392,7 @@ def on_click(x, y, button, pressed):
 
             if region_left + region_width > screen_width: region_left = screen_width - region_width
             if region_top + region_height > screen_height: region_top = screen_height - region_height
-            region_left = max(0, region_left) 
+            region_left = max(0, region_left)
             region_top = max(0, region_top)
             if region_width <= 0: region_width = 1
             if region_height <= 0: region_height = 1
@@ -404,23 +403,23 @@ def on_click(x, y, button, pressed):
                 clicked_blocks = get_average_color_blocks(resized_clicked_img)
 
                 found_similar_group = False
-                for group_id, count in list(recording_group_counter.items()): 
+                for group_id, count in list(recording_group_counter.items()):
                     representative_click_items = [item for item in recorded_clicks_data if item[0] == group_id]
-                    if not representative_click_items: continue 
+                    if not representative_click_items: continue
 
-                    representative_img_path = representative_click_items[0][4] 
+                    representative_img_path = representative_click_items[0][4]
                     if not os.path.exists(representative_img_path): continue
 
                     representative_img = Image.open(representative_img_path).resize(RESIZE_DIMENSIONS, Image.Resampling.LANCZOS)
                     representative_blocks = get_average_color_blocks(representative_img)
 
-                    similarity = compare_color_blocks(clicked_blocks, representative_blocks, MAX_COLOR_DISTANCE) 
-                    
-                    if similarity >= 0.7: 
+                    similarity = compare_color_blocks(clicked_blocks, representative_blocks, MAX_COLOR_DISTANCE)
+
+                    if similarity >= 0.7:
                         recording_group_counter[group_id] += 1
                         current_count = recording_group_counter[group_id]
                         print(f"  --> Click is similar to group '{group_id}'. Count: {current_count}/{NEW_TEMPLATE_TRAINING_CLICK_COUNT_THRESHOLD}")
-                        
+
                         timestamp = int(time.time())
                         click_img_filename = f"click_{timestamp}_{group_id}.png"
                         click_img_path = os.path.join(RECORDINGS_FULL_PATH, click_img_filename)
@@ -428,19 +427,19 @@ def on_click(x, y, button, pressed):
                         recorded_clicks_data.append((group_id, timestamp, x, y, click_img_path, clicked_blocks))
 
                         found_similar_group = True
-                        
+
                         if current_count >= NEW_TEMPLATE_TRAINING_CLICK_COUNT_THRESHOLD:
                             print(f"\n*** New Template Training: {NEW_TEMPLATE_TRAINING_CLICK_COUNT_THRESHOLD} similar clicks detected. Auto-creating new template! ***")
-                            create_new_template_from_group(group_id) 
+                            create_new_template_from_group(group_id)
                             recorded_clicks_data = [item for item in recorded_clicks_data if item[0] != group_id]
-                            del recording_group_counter[group_id] 
-                        break 
+                            del recording_group_counter[group_id]
+                        break
 
                 if not found_similar_group:
                     # MODIFIED: Use uuid for consistently unique group IDs
-                    group_id = uuid.uuid4().hex 
+                    group_id = uuid.uuid4().hex
                     recording_group_counter[group_id] = 1
-                    
+
                     timestamp = int(time.time())
                     click_img_filename = f"click_{timestamp}_{group_id}.png"
                     click_img_path = os.path.join(RECORDINGS_FULL_PATH, click_img_filename)
@@ -454,31 +453,31 @@ def on_click(x, y, button, pressed):
 
 
 def create_new_template_from_group(group_id):
-    global templates_data 
+    global templates_data
     group_clicks = [item for item in recorded_clicks_data if item[0] == group_id]
     if not group_clicks:
         print(f"No clicks found for group '{group_id}' to create a template.")
         return
 
-    representative_click_path = group_clicks[0][4] 
-    
+    representative_click_path = group_clicks[0][4]
+
     try:
         if not os.path.exists(representative_click_path):
             print(f"Error: Representative image '{representative_click_path}' not found for template creation.")
             return
 
         template_img = Image.open(representative_click_path)
-        
+
         # --- MODIFIED: Auto-generate template name ---
         template_name = uuid.uuid4().hex # Generate a unique random string
-        
+
         final_template_filename = f"{template_name}.png"
         final_template_path = os.path.join(TEMPLATES_FULL_PATH, final_template_filename)
-        
+
         template_img.save(final_template_path)
         print(f"Successfully created new template: {final_template_path}")
-        
-        templates_data = load_templates(TEMPLATES_FULL_PATH) 
+
+        templates_data = load_templates(TEMPLATES_FULL_PATH)
 
     except Exception as e:
         print(f"Error creating template from group '{group_id}': {e}")
@@ -487,19 +486,19 @@ def create_new_template_from_group(group_id):
 
 def refine_existing_template(template_name, location_box=None):
     global templates_data
-    template_filename = template_name 
+    template_filename = template_name
     template_path = os.path.join(TEMPLATES_FULL_PATH, template_filename)
 
     try:
         current_image = None
-        if location_box: 
+        if location_box:
             screen_width, screen_height = pyautogui.size()
-            
+
             x1 = int(max(0, location_box.left))
             y1 = int(max(0, location_box.top))
             x2 = int(min(screen_width, location_box.left + location_box.width))
             y2 = int(min(screen_height, location_box.top + location_box.height))
-            
+
             region_width = int(x2 - x1)
             region_height = int(y2 - y1)
 
@@ -520,7 +519,7 @@ def refine_existing_template(template_name, location_box=None):
         if current_image:
             current_image.save(template_path)
             print(f"Template '{template_name}' successfully refined/updated with new image.")
-            templates_data = load_templates(TEMPLATES_FULL_PATH) 
+            templates_data = load_templates(TEMPLATES_FULL_PATH)
         else:
             print(f"No image captured for refining '{template_name}'.")
 
@@ -532,21 +531,21 @@ def refine_existing_template(template_name, location_box=None):
 # --- Keyboard Listener for Mode Switching ---
 # Declared globally to be accessible by on_press and main loop
 mouse_listener = None
-keyboard_listener = None 
+keyboard_listener = None
 
 def on_press(key):
     global is_new_template_training_mode, is_auto_train_mode, is_settings_menu_active
-    global keyboard_listener, mouse_listener 
+    global keyboard_listener, mouse_listener
 
-    if is_settings_menu_active: 
+    if is_settings_menu_active:
         if key == keyboard.Key.esc:
-            is_settings_menu_active = False 
+            is_settings_menu_active = False
             print("\nExiting Settings Menu.")
-            return False 
-        return 
+            return False
+        return
 
     try:
-        if key == keyboard.Key.f9: 
+        if key == keyboard.Key.f9:
             is_new_template_training_mode = not is_new_template_training_mode
             if is_new_template_training_mode:
                 print("\n*** New Template Training Mode ENABLED (F9). Click 5 times for new template (auto-confirmed). ***")
@@ -554,7 +553,7 @@ def on_press(key):
             else:
                 print("\n*** New Template Training Mode DISABLED (F9). ***")
             print(f"    Current Modes: New Template Training: {'ON' if is_new_template_training_mode else 'OFF'}, Auto-Train: {'ON' if is_auto_train_mode else 'OFF'}")
-        elif key == keyboard.Key.f12: 
+        elif key == keyboard.Key.f12:
             is_auto_train_mode = not is_auto_train_mode
             if is_auto_train_mode:
                 print("\n*** Auto-Train Mode ENABLED (F12). Manual clicks will attempt to refine/train (2 hits). ***")
@@ -562,32 +561,33 @@ def on_press(key):
             else:
                 print("\n*** Auto-Train Mode DISABLED (F12). ***")
             print(f"    Current Modes: New Template Training: {'ON' if is_new_template_training_mode else 'OFF'}, Auto-Train: {'ON' if is_auto_train_mode else 'OFF'}")
-        elif key == keyboard.Key.f11: 
+        elif key == keyboard.Key.f11:
             print("\n*** F11 pressed. Entering Settings Menu. ***")
             if mouse_listener and mouse_listener.is_alive():
-                mouse_listener.stop() 
-            if keyboard_listener and keyboard_listener.is_alive(): 
-                keyboard_listener.stop() 
-            show_settings_menu() 
-            return False 
-        elif key == keyboard.Key.esc: 
+                mouse_listener.stop()
+            if keyboard_listener and keyboard_listener.is_alive():
+                keyboard_listener.stop()
+            show_settings_menu()
+            return False
+        elif key == keyboard.Key.esc:
             print("\nESC pressed. Exiting script.")
             if mouse_listener and mouse_listener.is_alive():
                 mouse_listener.stop()
-            if keyboard_listener and keyboard_listener.is_alive(): 
+            if keyboard_listener and keyboard_listener.is_alive():
                 keyboard_listener.stop()
-            sys.exit(0) 
+            sys.exit(0)
     except AttributeError:
-        pass 
+        pass
 
 
 # --- Main Auto-Clicker Logic ---
 
 def auto_click_multiple_templates():
-    global templates_data 
-    global last_scan_near_misses, last_scan_completion_time 
-    global mouse_listener, keyboard_listener 
-    global is_settings_menu_active 
+    global templates_data
+    global last_scan_near_misses, last_scan_completion_time
+    global mouse_listener, keyboard_listener
+    global is_settings_menu_active
+    global is_new_template_training_mode # Need to access this global variable
 
     print(f"--- Auto-Clicker Initializing ---")
     print(f"Script running from: {SCRIPT_DIR}")
@@ -595,47 +595,53 @@ def auto_click_multiple_templates():
     print(f"Debug screenshots will be saved to: {SCREENSHOTS_FULL_PATH}")
     print(f"Click recordings will be saved to: {RECORDINGS_FULL_PATH}")
 
-    load_config() 
-    templates_data = load_templates(TEMPLATES_FULL_PATH) 
-    
-    if not templates_data and not is_new_template_training_mode and not is_auto_train_mode:
-        print("No templates loaded and no training modes active. Exiting.")
-        return
+    load_config()
+    templates_data = load_templates(TEMPLATES_FULL_PATH)
 
-    print(f"Total {len(templates_data)} templates loaded.")
+    # MODIFIED: Check if no templates are loaded and activate training mode
+    if not templates_data:
+        print("No templates loaded. Automatically enabling New Template Training Mode.")
+        is_new_template_training_mode = True
+        print("\n*** New Template Training Mode ENABLED (F9). Click 5 times for new template (auto-confirmed). ***")
+        print("    (Press F9 again to disable this mode.)")
+    # Removed the check for `is_new_template_training_mode` and `is_auto_train_mode` here as it's now handled by the above `if` block.
+    # The script should not exit if no templates are found, but instead enter training mode.
+    print(f"Total {len(templates_data)} templates loaded.") # This line needs to be outside the if not templates_data block
     print(f"Starting auto-clicker. Press F9 for New Template Training, F12 for Auto-Train, F11 for Settings, ESC to exit.")
+    print(f"    Current Modes: New Template Training: {'ON' if is_new_template_training_mode else 'OFF'}, Auto-Train: {'ON' if is_auto_train_mode else 'OFF'}")
 
-    last_clicked_time = 0 
+
+    last_clicked_time = 0
 
     mouse_listener = mouse.Listener(on_click=on_click)
-    mouse_listener.daemon = True 
+    mouse_listener.daemon = True
     mouse_listener.start()
-    
+
     # Initialize keyboard listener once globally
     keyboard_listener = keyboard.Listener(on_press=on_press)
-    keyboard_listener.daemon = True 
-    keyboard_listener.start() 
+    keyboard_listener.daemon = True
+    keyboard_listener.start()
 
-    while True: 
+    while True:
         try:
             while True:
-                if is_settings_menu_active: 
-                    time.sleep(0.1) 
+                if is_settings_menu_active:
+                    time.sleep(0.1)
                     continue
 
-                if not is_new_template_training_mode: 
+                if not is_new_template_training_mode:
                     current_time = time.time()
                     if current_time - last_clicked_time < CLICK_DELAY_SECONDS:
-                        time.sleep(0.01) 
+                        time.sleep(0.01)
                         continue
 
-                    found_and_clicked = False 
-                    last_scan_near_misses = [] 
-                    
+                    found_and_clicked = False
+                    last_scan_near_misses = []
+
                     for template_name, original_template_pil, template_blocks in templates_data:
                         try:
                             template_path_for_pyautogui = os.path.join(TEMPLATES_FULL_PATH, template_name)
-                            
+
                             location = pyautogui.locateOnScreen(
                                 template_path_for_pyautogui,
                                 confidence=PYAUTOGUI_CONFIDENCE_INITIAL,
@@ -644,12 +650,12 @@ def auto_click_multiple_templates():
 
                             if location:
                                 screen_width, screen_height = pyautogui.size()
-                                
+
                                 x1 = int(max(0, location.left))
                                 y1 = int(max(0, location.top))
                                 x2 = int(min(screen_width, location.left + location.width))
                                 y2 = int(min(screen_height, location.top + location.height))
-                                
+
                                 region_width = int(x2 - x1)
                                 region_height = int(y2 - y1)
 
@@ -657,7 +663,7 @@ def auto_click_multiple_templates():
                                     continue
 
                                 screenshot_region_pil = pyautogui.screenshot(region=(x1, y1, region_width, region_height))
-                                
+
                                 candidate_resized_img = screenshot_region_pil.resize(RESIZE_DIMENSIONS, Image.Resampling.LANCZOS)
                                 candidate_blocks = get_average_color_blocks(candidate_resized_img)
 
@@ -665,7 +671,7 @@ def auto_click_multiple_templates():
 
                                 if match_confidence_blocks >= MATCH_BLOCK_THRESHOLD:
                                     print(f"Matched '{template_name}' with {match_confidence_blocks:.2f} confidence blocks at {location}. Clicking!")
-                                    
+
                                     timestamp = int(time.time())
                                     debug_screenshot_path = os.path.join(SCREENSHOTS_FULL_PATH, f"matched_{template_name.replace('.png', '')}_{timestamp}.png")
                                     try:
@@ -676,44 +682,44 @@ def auto_click_multiple_templates():
                                     click_x = location.left + location.width // 2
                                     click_y = location.top + location.height // 2
                                     pyautogui.click(click_x, click_y)
-                                    
+
                                     found_and_clicked = True
-                                    last_clicked_time = current_time 
-                                    break 
+                                    last_clicked_time = current_time
+                                    break
                                 elif match_confidence_blocks >= REFINEMENT_MIN_CONFIDENCE:
                                     last_scan_near_misses.append((template_name, location))
-                                
+
                         except pyautogui.ImageNotFoundException:
                             pass
                         except Exception as e:
                             print(f"An error occurred processing template '{template_name}': {e}")
                             import traceback
                             traceback.print_exc()
-                    
-                    last_scan_completion_time = time.time() 
+
+                    last_scan_completion_time = time.time()
                     if not found_and_clicked:
                         time.sleep(CHECK_INTERVAL_SECONDS)
 
-                else: 
-                    time.sleep(0.1) 
+                else:
+                    time.sleep(0.1)
 
         except KeyboardInterrupt:
             print("\nScript stopped by user (Ctrl+C).")
-            break 
+            break
         except pyautogui.FailSafeException:
             print("\nScript stopped by PyAutoGUI Fail-Safe (mouse moved to top-left corner).")
-            break 
+            break
         finally:
-            pass 
-        
+            pass
+
         # If a listener was stopped (e.g., for settings menu), restart it
         if not mouse_listener.is_alive():
             mouse_listener.start()
         if not keyboard_listener.is_alive():
             keyboard_listener.start()
-        
-        if is_settings_menu_active: 
-             is_settings_menu_active = False 
+
+        if is_settings_menu_active:
+             is_settings_menu_active = False
              print("Resuming auto-clicker.")
 
 
@@ -733,7 +739,7 @@ if __name__ == "__main__":
     print(" - Reactive Refinement: If the auto-clicker almost matches a template (but doesn't click), and you manually click that exact spot shortly after, it will prompt to refine that template.")
     print(" - Move your mouse to the top-left corner of the screen (0,0) or press 'ESC' to instantly stop the script.")
     print("--------------------------")
-    
-    templates_data = [] 
+
+    templates_data = []
 
     auto_click_multiple_templates()
